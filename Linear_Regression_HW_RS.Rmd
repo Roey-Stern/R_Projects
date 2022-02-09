@@ -1,0 +1,136 @@
+---
+title: "Linear Regression HW"
+author: "Roey Stern"
+date: "2/8/2022"
+output:
+  
+  html_document: default
+  pdf_document: 
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+### Libraries
+```{r}
+library(tidyverse)
+```
+
+### The Data
+```{r}
+StateData <- read_csv("StateData.csv")
+summary(StateData)
+```
+#### a)i) Scatterplot
+```{r a1}
+ggplot(data=StateData, aes(x=Longitude, y=Latitude)) + geom_point(color= "Blue") +
+  labs(title = 'States by Longitude and Latitude')
+```
+#### a)ii) Mean High School Grad by Region
+```{r a2}
+mean_by_region <- StateData %>%
+  group_by(Region) %>%
+  summarize(Mean=mean(HighSchoolGrad)) %>% arrange(desc(Mean))
+mean_by_region
+
+```
+#### a)iii) Box plot for 'Murder' by Region
+```{r a3}
+ggplot(StateData, aes(x=Murder, color = Region)) + geom_boxplot() +
+  facet_wrap(vars(Region), scales = 'free') +
+  theme(legend.position = 'none') +
+  labs(title = 'Murder Percent by Region in the US',
+       x= 'Murder %')
+```
+
+#### b) Linear Regression Model
+
+```{r model}
+model = lm(data = StateData,LifeExp ~ Population + Income + Illiteracy + Murder + HighSchoolGrad + Frost + Area) 
+summary(model)
+```
+#### b)i) Linear Regression Equation:
+
+##### y = 70.94 + 9.08(Population) - 10.92(Income) + 7.19(Illiteracy) - 9.18(Murder) +11.30(HighSchoolGrad)-18.59(Frost)-28.06(Area)  
+#### b)ii) <u>Interpenetration of Income Coefficient:</u>  
+The Income coefficient is −10.92585439. Therefore each one unit increase in Income is associated with a -10.92 unit decrease in Life Expectancy.   
+
+#### b)iii) <u>Life Expectancy by Income Plot</u>
+```{r plot}
+library(ggpubr)
+LifeEXP_Income <- StateData %>%
+  ggplot(aes(x= Income, y= LifeExp)) + 
+  geom_smooth(method="lm") +geom_point() +
+  stat_regline_equation() + stat_cor(aes(label=..rr.label..),label.x = 3100 , label.y = 73) + labs(
+    title = 'Life Expectancy by Income',
+    y = 'Life Expectancy'
+  )
+LifeEXP_Income
+         
+```
+  
+Based on the scatter plot, 1 unit increase in income is associated with a 0.00074 increase in LifeExp. This is completely different than the coefficient from my model. I beleive the reason for the discrepancy here is that in the model the Income variable was part of a multiple regression with other values and the combination with them affected its coefficient.  
+  
+#### c)Refining the Model
+```{r}
+model_2 <- lm(data = StateData, LifeExp ~ Population + Murder + HighSchoolGrad + Frost)
+summary(model_2)
+```
+#### <u>New Equation:</u>
+
+#### y = 71.02 + 8.62(Population) - 9.15(Murder) + 10.66(HighSchoolGrad) - 19.15(Frost) 
+  
+#### Comparison Between Model 1 and Model 2:
+Starting with the R squared values. Model 1 had an R squared of 0.7362 and an adjusted R squared of 0.6922. Model 2 had an R squared of 0.736 and an adjusted R squared of 0.7126. The R squared value was the practically the same between the 2 models. The adjusted R squared has increased in model 2, which indicates that model 2 is stronger and will be better used to predict data.  
+The coefficients of the variables that appear in both models have all decreased in their respective manner but 'frost' which grew a bit in model 2. 
+
+### Longitutde and Latitude to States
+```{r}
+library(sf)
+library(spData)
+long_lat <- StateData %>%
+  select(Longitude, Latitude)
+lonlat_to_state <- function(long_lat,
+                            states = spData::us_states,
+                            name_col = "NAME") {
+    pts <- st_as_sf(long_lat, coords = 1:2, crs = 4326)
+    
+    states <- st_transform(states, crs = 3857)
+    pts <- st_transform(pts, crs = 3857)
+     state_names <- states[[name_col]]
+    ii <- as.integer(st_intersects(pts, states))
+    state_names[ii] }
+
+State_names <- lonlat_to_state(long_lat)
+
+StateData <- StateData %>%
+  mutate('State' = State_names) 
+```
+### Predicting
+```{r}
+Prediction <-predict(model_2, newdata = StateData)
+
+Values <- data.frame(State=StateData$State, Actual_LifeExp =StateData$LifeExp
+                           , Predicted_LifeExp = Prediction)
+Values
+
+```
+#### Analysis - Lowest Life Expectancy
+```{r}
+lowest_predicted <- filter(Values, Predicted_LifeExp == min(Predicted_LifeExp))
+lowest_predicted
+
+lowest_actual <- filter(Values, Actual_LifeExp == min(Actual_LifeExp))
+lowest_actual
+```
+#### Highest Life Expectancy
+```{r}
+highest_predicted <- filter(Values, Predicted_LifeExp == max(Predicted_LifeExp))
+highest_predicted
+
+highest_actual <- filter(Values, Actual_LifeExp == max(Actual_LifeExp))
+highest_actual
+```
+
+
