@@ -1,0 +1,165 @@
+---
+title: "Logistic HW - Loans"
+author: "Roey Stern"
+date: "2/21/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(caTools)
+```
+
+```{r}
+loans <- read.csv('Loans.csv')
+summary(loans)
+```
+#### Split Data
+```{r}
+set.seed(99)
+spl = sample.split(loans$NotFullyPaid, SplitRatio = 0.7)
+train = subset(loans, spl==TRUE)
+test = subset(loans, spl==FALSE)
+```
+### Baseline Model
+```{r}
+loans_fully_paid <- table(loans$NotFullyPaid == 0)
+loans_fully_paid
+fully_paid_p <- round(100 * (loans_fully_paid[2]/nrow(loans)),3)
+```
+The accuracy of a baseline model where all the loans were fully paid is `r fully_paid_p`%.
+
+### Logistic Regression Model
+```{r model}
+model_1 = glm(data = train, NotFullyPaid ~ ., family = binomial)
+summary(model_1)
+
+model_1$coefficients
+```
+
+The significant values of the model are:  
+
+* `CreditPolicy`, `Purposecredit_card`, `Purposedebt_consolidation`, `Purposesmall_business`, `Installment`, `LogAnnualInc`, `Fico`, `RevolBal`, `InqLast6mths`.
+
+```{r}
+a <-  model_1$coefficients[1] + (700 * model_1$coefficients[13])
+b <-  model_1$coefficients[13] + (710 * model_1$coefficients[13])
+(a) - (b)
+```
+#### Prediction
+```{r}
+predictedRisk = predict(model_1, type="response", newdata = test)
+
+test <- test %>%
+  mutate('PredictedRisk' = predictedRisk)
+
+table_pr<- table(test$NotFullyPaid, predictedRisk > 0.5)
+table_pr
+acc <- round(100 * (table_pr[1,1] + table_pr[2,2])/sum(table_pr),3)
+acc
+```
+
+* In comparison to the baseline model, `model_1` has an accuracy of `r  acc`%, almost identical to the baseline model's `r fully_paid_p`%. The base line model is more accurate by 0.`r 995-954`%.  
+
+#### AUC and ROC
+```{r}
+library(ROCR)
+ROCRpred = prediction(predictedRisk, test$NotFullyPaid)
+ROCCurve = performance(ROCRpred, "tpr", "fpr")
+plot(ROCCurve, colorize=TRUE, print.cutoffs.at=seq(0,1,0.1),
+text.adj=c(-0.2,0.7))
+```
+
+```{r}
+AUC <- as.numeric(performance(ROCRpred, "auc")@y.values)
+AUC
+```
+
+The `AUC` value of the model is `r AUC`, this means that given 2 random observation from our data, the model will predict the correct class `r AUC`% of the times. Together with an accuracy of `r acc` (which is less than the baseline model), I think that this model is not good enough for an investor who is interested in using it to make profits.  
+
+#### IntRate Model
+```{r}
+IntRateModel <- glm(data = train, NotFullyPaid ~ IntRate, family = binomial)
+summary(IntRateModel)
+```
+* `IntRate` is very significant in this model unlike the previous model where it wasn't. The reason for this may involve the other variables. Together with other variables `IntRate` isn't significant but without them `IntRate`'s significance is heightened.  
+
+```{r}
+predIntR = predict(IntRateModel, type="response", newdata = test)
+max_prob <- round(100 * max(predIntR),3)
+
+table_IntR<- table(test$NotFullyPaid, predIntR > 0.5)
+table_IntR
+npinf <- table_IntR[1,1]
+acc_2 <- round(100 * table_IntR[1,1] /sum(table_IntR),3)
+```
+
+* According to the prediction, the highest probability for a loan not being paid back in full is `r max_prob`%. This model predicts that `r npinf` loans would not be paid back in full. Also, this model's accuracy is `r acc_2` 
+
+#### AUC and ROC IntRate
+```{r}
+ROCRpred_2 = prediction(predIntR, test$NotFullyPaid)
+ROCCurve_2 = performance(ROCRpred_2, "tpr", "fpr")
+plot(ROCCurve_2, colorize=TRUE, print.cutoffs.at=seq(0,1,0.1),
+text.adj=c(-0.2,0.7))
+```
+
+```{r}
+AUC_2 <- as.numeric(performance(ROCRpred_2, "auc")@y.values)
+AUC_2
+```
+
+Compared to `model_1`, `IntRateModel` has the same level of accuracy (`r acc_2`%), however it has a lower AUC value with `r AUC_2`. Taking this into account, `IntRateModel` is weaker than `model_1` since it is `r round(100 *(AUC - AUC_2),3)`% less likely to predict the correct class.  
+
+### Calculating Profitable Loans
+```{r}
+loan_1 <- 10 * exp(0.06*3)
+p_paid_back_in_full <- loan_1 - 10
+```
+If the investment isn't paid back in full, the lender can lose up to $10. 
+
+### Adding Profit Column to Test (3 Year Investment)
+```{r}
+test <- test %>%
+  mutate('Profit' = ifelse(NotFullyPaid == 1,0,(1*exp(test$IntRate*3)) -1))
+max_profit <- max(test$Profit)
+max_profit
+```
+### High Interest
+```{r}
+HighInterest <- test %>%
+  filter(IntRate >= 0.15)
+
+meanHI <- mean(HighInterest$Profit)
+
+npbif <- HighInterest %>%
+  count(NotFullyPaid == 1)
+npbif
+```
+The mean of the profit for the new dataset `HighInterest` is $`r meanHI`. The proportion of the high-interest loans that were not paid back in full is `r 95/(328+95)`.
+
+### Smallest Predicted Risk
+```{r}
+SelectedLoans <- HighInterest %>%
+  slice_min(PredictedRisk, n=100) 
+
+#SelectedLoans <- SelectedLoans[order(-SelectedLoans$PredictedRisk),]
+#SelectedLoans
+```
+
+```{r}
+total_profit <- sum(SelectedLoans$Profit)
+total_profit
+
+not_paid <- SelectedLoans %>%
+  count(NotFullyPaid == 1)
+not_paid
+```
+* The total profit made by an investor that invested 1 USD in the selected loans is `r total_profit`. There were only 14 loans out of the 100 selected that were not paid back in full. Compared to investing a 100 USD in all the loans, an investor would be making more than double the amount with investing 99% less money. It is definitely more lucrative to go with the selected loans. 
+* I think that since models aren't perfect, there is always some chance of error, people hesitate to put trust their funds in the hands of a model. As an analyst, I can work on creating the most reassuring models I can to attempt and convince investors to trust them. 

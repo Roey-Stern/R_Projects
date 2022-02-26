@@ -1,0 +1,101 @@
+---
+title: "Logistic HW - Parole"
+author: "Roey Stern"
+date: "2/21/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(caTools)
+```
+## Data
+```{r}
+parole <- read.csv('Parole.csv')
+glimpse(parole)
+percentage <- 100 * (nrow(filter(parole, Violator == 1)) / nrow(parole))
+percentage
+```
+
+We have data for `r nrow(parole)` parolees. Out of these parolees, `r percentage`% have violated their parole.
+
+### Split Data
+```{r}
+set.seed(88)
+spl = sample.split(parole$Violator, SplitRatio = 0.7)
+train = subset(parole, spl==TRUE)
+test = subset(parole, spl==FALSE)
+```
+### Logistic Model
+```{r}
+model_1 = glm(data = train, Violator ~ ., family = binomial)
+summary(model_1)
+```
+
+The significant variables are:  
+
+* `RaceWhite`
+* `StateVirginia`
+* `MultipleOffenses`
+
+```{r}
+model_1$coefficients
+
+z <- model_1$coefficients[1] + model_1$coefficients[2]*1 + model_1$coefficients[3]*1 + model_1$coefficients[4]*50 + model_1$coefficients[6]*1 + model_1$coefficients[8] * 3 + model_1$coefficients[9] *12 + model_1$coefficients[12] * 1
+
+1/ (1 + exp(-z))
+
+```
+
+#### Perdicting
+```{r}
+pred = predict(model_1, type="response", newdata = test)
+
+table(test$Violator, pred > 0.5)
+fp <- round(100 * (20/23),2)
+fn <- 100 * (0/179)
+acc <- round(100 * (182/202))
+```
+
+* False positive rate is `r fp`% . 
+
+* False negative rate is `r fn`%.
+
+* Overall Accuracy rate is `r acc`%.
+
+#### Baseline Model
+
+The accuracy of a baseline model where every parolee is a non-violator is `r 100 - percentage`%.
+My model's accuracy is `r acc`% and is improving on the baseline model.
+
+#### Parole Board
+A parole board would be more concerned with false negative errors since they would be releasing  
+someone thinking they won't violate their parole but they end up violating.  
+In order to avoid false negative errors, the board should set a lower threshold value.  
+With a low threshold more observation would be classified as 1 thus reducing instances when an  
+observation was classed 0 when it was actually 1.  
+
+#### AUC and ROC
+```{r}
+library(ROCR)
+ROCRpred = prediction(pred, test$Violator)
+ROCCurve = performance(ROCRpred, "tpr", "fpr")
+plot(ROCCurve, colorize=TRUE, print.cutoffs.at=seq(0,1,0.1),
+text.adj=c(-0.2,0.7))
+```
+
+```{r}
+AUC <- as.numeric(performance(ROCRpred, "auc")@y.values)
+AUC
+```
+
+The `AUC` value is `r AUC`, this means that given 2 random observation from our data, the model will predict the correct class `r AUC`% of the times.
+
+#### Conclusion
+Since the model accuracy is higher than the baseline model, the AUC is relatively high, and using a low threshold will allow for a small percentage of false positives, this model can be beneficial for a Parole Board and can be one of several tools used to evaluate parolee candidates. 
