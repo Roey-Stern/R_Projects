@@ -1,0 +1,128 @@
+---
+title: "Vandalism on Wikipedia"
+author: "Roey Stern"
+date: '2022-03-16'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+library(tidyverse)
+library(caTools)
+library(corrplot)
+```
+
+```{r}
+wiki <- read.csv('Wikipedia.csv')
+glimpse(wiki)
+```
+
+```{r}
+numofVandal <- wiki %>% count(Vandal == 1) 
+numofVandal
+numofVandalpercentage <- round(100*(1815/2061),2)
+```
+The number of Vandalism instances on the page is 1815 which is `r numofVandalpercentage`% of the instances.
+
+```{r}
+avgwordsadd <- mean(wiki$NumWordsAdded)
+avgwordsdel <- mean(wiki$NumWordsRemoved)
+df <- data.frame(AvgWordsAdded = avgwordsadd, AvgWordsRemoved = avgwordsdel)
+df
+```
+
+```{r}
+cor(wiki)
+```
+`LoggedIn` had the highest negative correlation value with `Vandal` of -0.429.  
+
+### Split
+```{r}
+set.seed(74)
+spl = sample.split(wiki$Vandal, SplitRatio = 0.7)
+train = subset(wiki, spl==TRUE)
+test = subset(wiki, spl==FALSE)
+```
+### Baseline for test data
+```{r}
+notV <- train %>%
+  count(Vandal == 0)
+notV
+notVp <- round(100*(notV[2,2]/nrow(train)),2)
+```
+The baseline train data model is `r notVp`% accurate.
+
+```{r}
+model1 <- rpart(Vandal ~ ., method="class", data =
+train, minbucket=25)
+model2 <- rpart(Vandal ~ ., method="class", data =
+train, minbucket=10)
+model3 <- rpart(Vandal ~ ., method="class", data =
+train, minbucket=2)
+```
+
+```{r}
+prp(model1, extra=102)
+```
+
+```{r}
+prp(model2, extra=102)
+```
+
+```{r}
+prp(model3, extra=102)
+```
+
+```{r}
+pred1 <- predict(model1, newdata = test, type = 'class')
+pred2 <- predict(model2, newdata = test, type = 'class')
+pred3 <- predict(model3, newdata = test, type = 'class')
+```
+
+```{r}
+tab1<- table(test$Vandal, pred1) 
+tab2<- table(test$Vandal, pred2) 
+tab3<- table(test$Vandal, pred3) 
+acc1 <- round(100*((tab1[1,1] + tab1[2,2])/nrow(test)),2)
+acc2 <- round(100*((tab2[1,1] + tab2[2,2])/nrow(test)),2)
+acc3 <- round(100*((tab3[1,1] + tab3[2,2])/nrow(test)),2)
+
+accDF <- data.frame(Accuracy_model1 = acc1, Accuracy_model2 = acc2, Accuracy_model3 = acc3)
+accDF
+```
+* The variables used by the tree were `LoggedIn`, `NumWordsA`, and `NumWordsR`. They also appear to be the most significant.
+* The accuracy of the model is `r acc1`%.  
+
+### Random Forest Model
+```{r}
+train$Vandal <- as.factor(train$Vandal)
+test$Vandal <- as.factor(test$Vandal)
+```
+
+```{r}
+Forest_Model = randomForest(Vandal ~ ., data = train, method="class", ntree=500, nodesize=15)
+```
+
+```{r}
+Forest_pred = predict(Forest_Model, newdata= test)
+
+tab4 <- table(test$Vandal,Forest_pred)
+tab4
+
+acc4 <- round(100*((tab4[1,1] + tab4[2,2])/nrow(test)),2)
+```
+* The random forest model had an accuracy of `r acc4`%, which is a bit better than the CART model.
+
+### Business Implication
+* There may be a better model out there to detect vandalism in Wikipedia but until it is found this model (Random Forest one) is better than the baseline and can improve Wikipedia's current ability to detect Vandalism. Thus I'd recommend applying it while looking for improvements.
+* One variable I would look for is "Number of inappropriate/slur words/language" I think that this variable will be a strong indication to whether a wiki page was vandalized. Another varibale can be "Number of pictures added/removed".
+* I believe so since all of the wiki pages share the same structure. 
+

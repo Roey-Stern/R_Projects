@@ -1,0 +1,141 @@
+---
+title: "State Data Revisited"
+author: "Roey Stern"
+date: "3/4/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+library(tidyverse)
+library(caTools)
+```
+# Data
+```{r}
+state <- read.csv('StateData.csv')
+glimpse(state)
+```
+## Linear regression
+### Model 1
+```{r}
+model_1 <- lm(data = state, LifeExp ~ Population + Murder + Frost + Income + Illiteracy + Area
+              + HighSchoolGrad)
+summary(model_1)
+```
+The model's r squared value is `r summary(model_1)$adj.r.squared`.
+
+### Model 2
+```{r}
+model_2 <- lm(data = state, LifeExp ~ Population + Murder + Frost + HighSchoolGrad)
+summary(model_2)
+```
+The model's r squared value is `r summary(model_2)$adj.r.squared`.
+By removing independent variables we increase the model's accuracy. In CART models we cross-validate to find the best parameters and thus maximize our model's accuracy.  
+
+### Model 3
+```{r}
+model_3 <- lm(data = state, LifeExp ~ Population + Murder + HighSchoolGrad)
+summary(model_3)
+step(model_1, test = 'F')
+```
+
+
+## CART Model
+### Cross-Validation 
+```{r}
+set.seed(99)
+spl = sample.split(state$LifeExp, SplitRatio = 0.5)
+validate_train = subset(state, spl==TRUE)
+validate_test = subset(state, spl==FALSE)
+```
+
+```{r}
+Vmodel1 <- rpart(LifeExp ~ Population + Murder + Frost + Income + Illiteracy + Area + HighSchoolGrad, data =validate_train, minbucket=8)
+
+Vmodel2 <- rpart(LifeExp ~ Population + Murder + Frost + Income + Illiteracy + Area + HighSchoolGrad, data =validate_train, minbucket=5)
+
+Vmodel3 <- rpart(LifeExp ~ Population + Murder + Frost + Income + Illiteracy + Area + HighSchoolGrad, data =validate_train, minbucket=2)
+```
+
+```{r}
+Vpred1 <- predict(Vmodel1, newdata = validate_test)
+
+Vpred2 <- predict(Vmodel2, newdata = validate_test)
+
+Vpred3 <- predict(Vmodel3, newdata = validate_test)
+```
+
+```{r}
+validate_test_with_pred <- validate_test %>%
+  select(LifeExp) %>%
+  add_column('Vpred1' = Vpred1,'Vpred2'= Vpred2, 'Vpred3'=Vpred3)
+validate_test_with_pred <- validate_test_with_pred %>%
+  add_column('Error1' = validate_test_with_pred$Vpred1 - validate_test_with_pred$LifeExp,
+             'Error2' = validate_test_with_pred$Vpred2 - validate_test_with_pred$LifeExp,
+             'Error3' = validate_test_with_pred$Vpred3 - validate_test_with_pred$LifeExp)
+             
+
+validate_test_with_pred
+```
+
+```{r}
+SSR = sum((validate_test_with_pred$Error3)^2)
+SST = sum((validate_test_with_pred$LifeExp - mean(validate_train$LifeExp))^2)
+SSR
+SST
+RSQ = 1- (SSR/SST)
+RSQ
+```
+#### Model and Plot
+```{r}
+CARTmodel <- rpart(LifeExp ~ Population + Murder + Frost + Income + Illiteracy + Area + HighSchoolGrad, data =state, minbucket=5)
+
+prp(CARTmodel, extra = 1)
+```
+* The variables that appear are `Murder`, `Area`, and `HighSchoolGrad`. The CART model is easier to interpret because you can visualize it more easily.  
+
+#### Prediction
+```{r}
+pred <- predict(CARTmodel, newdata = state)
+df <- data.frame(Life_Exp = state$LifeExp, Prediction = pred)
+df <- df %>% mutate(Error = Prediction - Life_Exp)
+df
+```
+
+```{r}
+SSR1 = sum((df$Error)^2)
+SST1 = sum((df$Life_Exp - mean(df$Life_Exp))^2)
+RSQ1 = 1- (SSR1/SST1)
+RSQ1
+```
+
+### Random Forest Model
+
+```{r}
+Forest = randomForest(LifeExp ~ Population + Murder + Frost + Income + Illiteracy + Area + HighSchoolGrad, data = state)
+```
+
+```{r}
+Fpred <- predict(Forest, newdata = state)
+
+df2 <- data.frame(Observed_LifeExp = state$LifeExp, Predicted = Fpred)
+df2 <- df2 %>% mutate(Error = Predicted - Observed_LifeExp)
+df2
+```
+
+```{r}
+SSR3 = sum((df2$Error)^2)
+SST3 = sum((df2$Observed_LifeExp - mean(df2$Observed_LifeExp))^2)
+mean(df2$Observed_LifeExp)
+RSQ3 = 1- (SSR3/SST3)
+RSQ3 <- round(RSQ3*100,2)
+```
+The best model out of the ones I built was the random forest one with the highest r squared score of `r RSQ3`%. 

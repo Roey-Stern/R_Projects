@@ -1,0 +1,198 @@
+---
+title: "CART and Decision Trees"
+author: "Roey Stern"
+date: "2/28/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+library(tidyverse)
+library(caTools)
+```
+# The Data
+```{r}
+letters <- read.csv('Letters.csv')
+summary(letters)
+head(letters)
+```
+### Adding IsB
+```{r}
+letters <- letters %>%
+  mutate(IsB = ifelse(Letter == 'B', 'Yes', 'No'))
+head(letters)
+```
+### Split
+```{r}
+set.seed(94)
+spl = sample.split(letters$IsB, SplitRatio = 0.5)
+train = subset(letters, spl==TRUE)
+test = subset(letters, spl==FALSE)
+```
+### Baseline
+```{r}
+notB<- train %>%
+  count(IsB == 'No')
+notB
+```
+The baseline model is `r round(100 * (1175/nrow(train)),2)`% accurate. 75.42% of the times the letter is not "B".
+
+### CART Model
+```{r}
+model1 <- rpart(IsB ~ Xbox + Ybox + Width + Height + Onpix
++ Xbar + Ybar + Xedge + Yedge, method="class", data =
+letters, minbucket=25)
+```
+
+```{r}
+prp(model1, extra =1, faclen =0)
+```
+
+```{r}
+pred1 <- predict(model1, newdata = test, type = 'class')
+tab1 <- table(test$IsB, pred1)
+tab1
+acc <- round(100 * ((tab1[1,1] + tab1[2,2])/nrow(test)),2)
+acc
+```
+The model's accuracy is `r acc`.
+```{r}
+set.seed(94)
+spl = sample.split(train$IsB, SplitRatio = 0.5)
+validate_train_train = subset(letters, spl==TRUE)
+validate_train_test = subset(letters, spl==FALSE)
+```
+
+```{r}
+model2 <- rpart(IsB ~ Xbox + Ybox + Width + Height + Onpix
++ Xbar + Ybar + Xedge + Yedge, method="class", data =
+letters, minbucket=25)
+
+model3 <- rpart(IsB ~ Xbox + Ybox + Width + Height + Onpix
++ Xbar + Ybar + Xedge + Yedge, method="class", data =
+letters, minbucket=15)
+
+model4 <- rpart(IsB ~ Xbox + Ybox + Width + Height + Onpix
++ Xbar + Ybar + Xedge + Yedge, method="class", data =
+letters, minbucket=5)
+```
+
+```{r}
+pred2 <- predict(model2, newdata = validate_train_test, type = 'class')
+
+pred3 <- predict(model3, newdata = validate_train_test, type = 'class')
+
+pred4 <- predict(model4, newdata = validate_train_test, type = 'class')
+```
+
+```{r}
+tab2 <- table(validate_train_test$IsB, pred2)
+tab3 <- table(validate_train_test$IsB, pred3)
+tab4 <- table(validate_train_test$IsB, pred4)
+```
+
+```{r}
+acc2 <- round(100 * ((tab2[1,1] + tab2[2,2])/nrow(validate_train_test)),2)
+
+acc3 <- round(100 * ((tab3[1,1] + tab3[2,2])/nrow(validate_train_test)),2)
+
+acc4 <- round(100 * ((tab4[1,1] + tab4[2,2])/nrow(validate_train_test)),2)
+```
+* The accuracy of model 2 is `r acc2`.
+* The accuracy of model 3 is `r acc3`.
+* The accuracy of model 4 is `r acc4`.  
+
+#### Random Forest 
+First make sure our outcome variable is a factor.
+```{r}
+train$IsB <- as.factor(train$IsB)
+test$IsB <- as.factor(test$IsB)
+```
+Building the random forest model:
+```{r}
+IsBForest = randomForest(IsB ~ Xbox + Ybox + Width + Height + Onpix
++ Xbar + Ybar + Xedge + Yedge, method="class", data = train,ntree=200, nodesize=15)
+```
+#### Predict Forest
+```{r}
+predforest <- predict(IsBForest, newdata = test)
+
+forest_tab <- table(test$IsB, predforest)
+
+forest_tab
+
+forest_acc <-  round(100*((forest_tab[1,1] + forest_tab[2,2])/nrow(test)),2)
+```
+
+The accuracy of the random forest model is `r forest_acc`%. The random forest model performed
+better than the single tree model.  
+
+### Letters Model
+#### Baseline
+```{r}
+letters %>%
+  count(Letter)
+```
+The baseline suggests that 'P' is the most frequent letter with it appearing `r round(100 *803/nrow(letters),2)`% of the times. I think this baseline is not a good benchmark for this model since it doesn't consider any of the variables into account.  
+
+### Classification Tree Model
+#### Split
+```{r}
+set.seed(85)
+spl = sample.split(letters$Letter, SplitRatio = 0.5)
+train_2 = subset(letters, spl==TRUE)
+test_2 = subset(letters, spl==FALSE)
+```
+#### Model
+```{r}
+modelL <- rpart(Letter ~ Xbox + Ybox + Width + Height + Onpix
++ Xbar + Ybar + Xedge + Yedge, method="class", data =
+train_2, minbucket=25)
+```
+
+```{r}
+prp(modelL)
+```
+
+```{r}
+predL <- predict(modelL, newdata = test_2, type = 'class')
+tabL <- table(test_2$Letter, predL)
+tabL
+accL <- round(100 * ((tabL[1,1] + tabL[2,2] + tabL[3,3] + tabL[4,4]) /nrow(test_2)),2)
+accL
+```
+
+The new model's accuracy is `r accL`%.  
+
+#### Random Forest Model
+```{r}
+train_2$Letter <- as.factor(train_2$Letter)
+test_2$Letter <- as.factor(test_2$Letter)
+```
+
+```{r}
+LForest = randomForest(Letter ~ Xbox + Ybox + Width + Height + Onpix
++ Xbar + Ybar + Xedge + Yedge, method="class", data = train_2, ntree=200, nodesize=15)
+```
+
+```{r}
+predLforest <- predict(LForest, newdata = test_2)
+
+forestL_tab <- table(test_2$Letter, predLforest)
+
+forestL_tab
+
+forestL_acc <- round(100 * ((forestL_tab[1,1] + forestL_tab[2,2] + forestL_tab[3,3] + forestL_tab[4,4]) /nrow(test_2)),2)
+```
+
+The random forest model accuracy is `r forestL_acc`%.
+* Looking at the accuracy rates for both of the models, I would pick the random forest one over the CART model since it has a higher accuracy rate. I witnessed similar results in the first part of this question. 
+
