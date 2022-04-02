@@ -1,0 +1,83 @@
+---
+title: "Network - Visualization"
+author: "Roey Stern"
+date: '2022-03-28'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE}
+library(tidyverse)
+library(igraph)
+```
+
+```{r}
+users <- read.csv('Users.csv')
+glimpse(users)
+edges <- read.csv('Edges.csv')
+glimpse(edges)
+```
+
+```{r}
+number_of_users <- users %>% nrow()
+avg_friends <- round(nrow(edges)/number_of_users,2)
+common_locale <- users %>% filter(School != "") %>% count(Locale)
+common_locale
+schools <- users %>% count(Gender, School)
+schools
+```
+
+* The number of users is `r number_of_users`.
+* The average number of friends per user is `r avg_friends`. (We have 146 friendships of 59 users.)
+* Out of the users that listed a school, the most common locale is B with 19 users.
+* No, both School A and School AB have both genders. 
+
+```{r}
+g = graph.data.frame(edges, FALSE, users)
+plot(g, vertex.size= 5, vertex.label = NA)
+```
+
+
+* There are 3 connected components. 
+* There are 7 users with no friends.
+
+
+```{r}
+degree(g)
+```
+
+
+* There are 7 users with 10+ friends. 
+
+
+```{r}
+V(g)$color[V(g)$Gender == "A"] = "red"
+V(g)$color[V(g)$Gender == "B"] = "gray"
+plot(g, vertex.size = 5, vertex.label = NA)
+```
+
+
+* The coloration shows that there are a lot more B gender and they are friends with more B gender than A gender. 
+
+
+```{r}
+V(g)$color[V(g)$School == "A"] = "red"
+V(g)$color[V(g)$School == "AB"] = "gray"
+plot(g, vertex.size = 5, vertex.label = NA)
+```
+
+* yes it seems from looking at the graph that the AB users (gray) are connected to each other. 
+
+
+```{r}
+V(g)$color[V(g)$Locale == "A"] = "red"
+V(g)$color[V(g)$Locale == "B"] = "gray"
+plot(g, vertex.size = 5, vertex.label = NA)
+```
+
+* This coloration is very clear in this graph and shows that people from the same locale are friends with each other almost exclusively. 

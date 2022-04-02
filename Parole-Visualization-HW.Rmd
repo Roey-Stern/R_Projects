@@ -1,0 +1,54 @@
+---
+title: "Parole - Visualization"
+author: "Roey Stern"
+date: '2022-03-28'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE}
+library(tidyverse)
+```
+
+```{r}
+parole <- read.csv('Parole.csv')
+glimpse(parole)
+```
+# Histogram
+```{r}
+ggplot(parole,aes(x=Age)) + geom_histogram(binwidth = 5,color = 'blue')
+```
+
+* The age bracket with the most parolees is 25-29 and the lowest is 65-69.
+* It adds blue borders for each bin
+```{r}
+ggplot(parole,aes(x=Age)) + geom_histogram(binwidth = 5,color = 'blue') + facet_grid(. ~ Male)
+```
+
+* From the 2 histograms it is clear that there are a lot more male samples than female. It also appears that the average female parole is about 40 years old while the male is around 25 years old. 
+
+* The change flipped the orientation of the charts and now they are next to each other instead of on top of each other. 
+
+```{r}
+ggplot(parole, aes(x=Age, fill = Male)) + geom_histogram(binwidth = 5, position='identity', alpha = 0.5)
+```
+
+* The faceting option is a lot better for visualizing this data because with the overlaying it is unclear that we are trying to distinguish between Male and Female while Faceting makes it obvious. 
+```{r}
+ggplot(parole, aes(x=TimeServed)) + geom_histogram(binwidth = 1,color ='blue') +
+  facet_grid(. ~ Crime)
+```
+
+* The most common length of time served is 5 months.
+* Now the most common time served is 3, this indicates that even changing one parameter in the setting can result in a whole different visual. 
+* The faceted histogram indicates that for driving the most common time served is 4 months, while for Drugs it is 5 months, for Larceny is 5 months, and for others the most common time served is either 4 or 5 months.
+```{r}
+ggplot(parole, aes(x=TimeServed, fill= Crime)) + geom_histogram(binwidth = 1,color ='blue', position = 'identity', alpha = 0.5) 
+```
+
+* The visualization that best suites the data is the faceting, it is very hard to look at the overlaying chart, there are too many colors and it is hard to distinguish between them. 

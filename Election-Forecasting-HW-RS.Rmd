@@ -1,0 +1,54 @@
+---
+title: "Election Forecasting"
+author: "Roey Stern"
+date: '2022-03-29'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(maps)
+library(ggmap)
+```
+
+```{r}
+poll <- read.csv('Polling.csv')
+glimpse(poll)
+```
+
+```{r}
+StatesMap = map_data("state")
+electionMap =  merge(StatesMap, poll, by.x = "region",
+by.y = "State")
+electionMap =electionMap[order(electionMap$order),]
+```
+
+```{r}
+ggplot(electionMap, aes(x = long, y = lat,fill = DiffCount,group=group)) + geom_polygon() + scale_fill_gradient(low = "blue", high = "red")
+```
+
+* Florida looks like it has a very clear Republican presence. 
+
+```{r}
+ggplot(electionMap, aes(x = long, y = lat,fill = Rasmussen,group=group)) + geom_polygon() + scale_fill_gradient(low = "blue", high = "red")
+```
+
+```{r}
+ggplot(electionMap, aes(x = long, y = lat,fill = SurveyUSA,group=group)) + geom_polygon() + scale_fill_gradient(low = "blue", high = "red")
+```
+
+* There are a lot more NAs in the two other graphs.
+* Some states get a different color in different plots. 
+* All the plots show Florida going Republican when it ended up democratic. 
+
+```{r}
+ggplot(electionMap, aes(x = long, y = lat,fill = Republican,group=group)) + geom_polygon() + scale_fill_gradient(low = "blue", high = "red")
+```
+
+* If I had to create a predictive model I would use the `DiffCount` variable since it has more states predicted and looks more like the actual results. 
